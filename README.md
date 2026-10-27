@@ -45,13 +45,14 @@ The kernel's text console is fine; Kodi takes the display over from it.
 
 ## Built-in add-ons
 
-Three add-ons are built into Kodi's system directory and listed in its
+Four add-ons are built into Kodi's system directory and listed in its
 manifest. That is what makes Kodi enable them on a fresh profile; add-ons
 that appear any other way start disabled.
 
 | Add-on | What it does |
 |---|---|
 | `repository.jellyfin.kodi` | Jellyfin's own repository, where Jellyfin for Kodi and JellyCon live. Neither is in a Kodi repository. The zip is pinned by checksum. |
+| `repository.siku2` | SponsorBlock's author's repository: SponsorBlock (`script.service.sponsorblock`), which skips sponsor segments in YouTube videos, is in no Kodi repository either. The zip is pinned by checksum. |
 | `service.homelab.setup` | On every start, installs each add-on named in `KODI_ADDONS` (space-separated IDs) that is missing. It goes through Kodi's own installer, which resolves dependencies, by answering the "Install?" dialog with Yes. It retries after a repository refresh, and shows a notification for what it could not install. |
 | `script.homelab.cec` | TV power over CEC for callers that only have JSON-RPC: `Addons.ExecuteAddon` with `addonid` `script.homelab.cec` and `params` `["on"]`, `["standby"]` or `["toggle"]`. |
 

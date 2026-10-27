@@ -25,7 +25,7 @@ run 'ls /usr/lib/x86_64-linux-gnu/kodi/addons/inputstream.adaptive/' \
   || fail "inputstream.adaptive not installed"
 ok "inputstream.adaptive"
 
-for a in repository.jellyfin.kodi service.homelab.setup script.homelab.cec; do
+for a in repository.jellyfin.kodi repository.siku2 service.homelab.setup script.homelab.cec; do
   run "test -f /usr/share/kodi/addons/$a/addon.xml && grep -q '<addon optional=\"true\">$a</addon>' /usr/share/kodi/system/addon-manifest.xml" \
     || fail "$a is not built in and listed in the manifest"
 done
