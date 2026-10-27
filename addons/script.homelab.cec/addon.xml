@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="script.homelab.cec" name="TV power (CEC)" version="1.0.0" provider-name="sleien">
+  <requires>
+    <import addon="xbmc.python" version="3.0.1"/>
+  </requires>
+  <extension point="xbmc.python.script" library="default.py">
+    <provides>executable</provides>
+  </extension>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en_GB">Switches the TV on or to standby over CEC</summary>
+    <description lang="en_GB">Run with one argument, on, standby or toggle, for example from JSON-RPC: Addons.ExecuteAddon with addonid script.homelab.cec and params ["on"].</description>
+    <platform>all</platform>
+    <license>MIT</license>
+  </extension>
+</addon>

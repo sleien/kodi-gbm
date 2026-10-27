@@ -32,6 +32,9 @@ jobs:
       - name: shellcheck
         run: shellcheck -s sh entrypoint.sh tests/image.sh
 
+      - name: Add-on unit tests
+        run: python3 -I -m unittest discover -s tests -v
+
       - uses: docker/setup-buildx-action@v3
 
       - name: Build for the checks

@@ -25,6 +25,23 @@ RUN apt-get update \
       tini \
  && rm -rf /var/lib/apt/lists/*
 
+# Add-ons built into Kodi's system add-on directory and listed in its manifest,
+# which is what makes Kodi enable them on a fresh profile; add-ons that appear
+# any other way start disabled.
+# - repository.jellyfin.kodi: Jellyfin's own repository, where Jellyfin for
+#   Kodi lives; it is in no Kodi repository. Pinned by checksum.
+# - service.homelab.setup: installs the add-ons KODI_ADDONS names.
+# - script.homelab.cec: TV power over CEC for JSON-RPC callers.
+ADD --checksum=sha256:7409807249c9cc43c6b3b0df3fb9baa380bc62afcc8ad464444a95261a437ba6 \
+    https://kodi.jellyfin.org/repository.jellyfin.kodi.zip /tmp/repository.jellyfin.kodi.zip
+COPY addons/ /usr/share/kodi/addons/
+RUN python3 -m zipfile -e /tmp/repository.jellyfin.kodi.zip /usr/share/kodi/addons/ \
+ && rm /tmp/repository.jellyfin.kodi.zip \
+ && chmod -R a+rX /usr/share/kodi/addons \
+ && sed -i 's|^</addons>$|  <addon optional="true">repository.jellyfin.kodi</addon>\n  <addon optional="true">service.homelab.setup</addon>\n  <addon optional="true">script.homelab.cec</addon>\n</addons>|' \
+      /usr/share/kodi/system/addon-manifest.xml \
+ && grep -q 'service.homelab.setup' /usr/share/kodi/system/addon-manifest.xml
+
 # uid/gid 1000, matching PUID/PGID on the homelab host. The stack runs it as
 # ${PUID}:${PGID} anyway; this gives that uid a home and a name. The home is
 # traversable by any uid, so a host whose PUID is not 1000 still reaches the
