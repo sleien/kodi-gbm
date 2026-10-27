@@ -26,9 +26,12 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # uid/gid 1000, matching PUID/PGID on the homelab host. The stack runs it as
-# ${PUID}:${PGID} anyway; this gives that uid a home and a name.
+# ${PUID}:${PGID} anyway; this gives that uid a home and a name. The home is
+# traversable by any uid, so a host whose PUID is not 1000 still reaches the
+# ~/.kodi it mounts there.
 RUN groupadd --gid 1000 kodi \
- && useradd --uid 1000 --gid 1000 --create-home --home-dir /home/kodi kodi
+ && useradd --uid 1000 --gid 1000 --create-home --home-dir /home/kodi kodi \
+ && chmod 0755 /home/kodi
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 

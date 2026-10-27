@@ -31,14 +31,16 @@ run 'test "$(id -u)" = 1000 && test "$HOME" = /home/kodi' \
   || fail "not running as uid 1000 with HOME=/home/kodi"
 ok "uid 1000"
 
-# Seeding, in a throwaway home.
+# Seeding, in a throwaway home, as the caller's uid: the stack runs the image
+# as ${PUID}:${PGID}, and files written as another uid would be unreadable here.
+as_me="$(id -u):$(id -g)"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 chmod 0777 "$tmp"
 printf '<favourites/>\n' >"$tmp/favourites.xml"
 chmod 0644 "$tmp/favourites.xml"
 
-docker run --rm -e KODI_SEED_ONLY=1 -e 'KODI_WEB_PASSWORD=p&ss<w>rd' \
+docker run --rm --user "$as_me" -e KODI_SEED_ONLY=1 -e 'KODI_WEB_PASSWORD=p&ss<w>rd' \
   -e YOUTUBE_API_KEY=AIzaTEST -e YOUTUBE_CLIENT_ID=123-abc.apps.googleusercontent.com \
   -e YOUTUBE_CLIENT_SECRET=GOCSPX-test \
   -v "$tmp:/home/kodi/.kodi" -v "$tmp/favourites.xml:/seed/favourites.xml:ro" \
@@ -60,14 +62,14 @@ ok "api_keys.json"
 
 # A second start changes nothing that Kodi now owns.
 printf 'edited on the TV\n' >"$u/guisettings.xml"
-docker run --rm -e KODI_SEED_ONLY=1 -e KODI_WEB_PASSWORD=other \
+docker run --rm --user "$as_me" -e KODI_SEED_ONLY=1 -e KODI_WEB_PASSWORD=other \
   -v "$tmp:/home/kodi/.kodi" "$IMAGE" || fail "second start failed"
 [ "$(cat "$u/guisettings.xml")" = "edited on the TV" ] || fail "seed overwrote guisettings.xml"
 ok "seeds never overwrite"
 
 # No password: the first start refuses rather than run an open web server.
 tmp2=$(mktemp -d); chmod 0777 "$tmp2"
-if docker run --rm -e KODI_SEED_ONLY=1 -v "$tmp2:/home/kodi/.kodi" "$IMAGE" 2>/dev/null; then
+if docker run --rm --user "$as_me" -e KODI_SEED_ONLY=1 -v "$tmp2:/home/kodi/.kodi" "$IMAGE" 2>/dev/null; then
   rm -rf "$tmp2"; fail "first start without KODI_WEB_PASSWORD succeeded"
 fi
 rm -rf "$tmp2"
