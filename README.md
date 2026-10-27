@@ -52,7 +52,7 @@ After that, Kodi owns them, and changes made on the TV win.
 |---|---|---|
 | `userdata/guisettings.xml` | `KODI_WEB_USER` (default `kodi`), `KODI_WEB_PASSWORD` (required) | web server with a login; JSON-RPC from other machines; no Zeroconf, UPnP or AirPlay; no unknown add-on sources; passthrough of AC3, E-AC3 and DTS but not TrueHD or DTS-HD, which plain HDMI ARC cannot carry |
 | `userdata/favourites.xml` | `/seed/favourites.xml`, if mounted | the home screen's favourites |
-| `userdata/addon_data/plugin.video.youtube/api_keys.json` | `YOUTUBE_API_KEY`, `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, all three | personal API keys for the YouTube add-on, in its 7.x store format |
+| `userdata/addon_data/plugin.video.youtube/api_keys.json` | `YOUTUBE_API_KEY`, `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, all three | personal API keys for the YouTube add-on, in its 7.x store format. Also written over the add-on's own empty store, so keys can arrive after the first start; a key already set is never replaced |
 
 `KODI_SEED_ONLY=1` seeds and exits; the tests use it.
 
@@ -61,9 +61,15 @@ to Kodi's input whenever Kodi starts, which means at every reboot. Set them in
 Kodi, under Settings → System → Input → Peripherals → CEC Adapter, once the
 adapter is plugged in.
 
-When Kodi exits, the container exits. There is no restart loop inside it;
-the container's restart policy brings it back, so a crash shows in
-`docker ps` and in the logs.
+**Exit is the way to the host's console.** Choosing Exit in Kodi's power
+menu ends Kodi with code 0. The container then stays up without Kodi, the
+display goes back to the kernel's text console, and a keyboard on the host
+reaches its login prompt. `docker restart kodi`, or a reboot, starts Kodi
+again.
+
+**A crash exits the container** with Kodi's code. The restart policy brings it
+back, and the crash shows in `docker ps` and in the logs. There is no restart
+loop inside the container.
 
 ## Releasing
 

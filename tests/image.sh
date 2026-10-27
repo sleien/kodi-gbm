@@ -67,6 +67,36 @@ docker run --rm --user "$as_me" -e KODI_SEED_ONLY=1 -e KODI_WEB_PASSWORD=other \
 [ "$(cat "$u/guisettings.xml")" = "edited on the TV" ] || fail "seed overwrote guisettings.xml"
 ok "seeds never overwrite"
 
+# The add-on's own empty store, written on its first run, still gets the keys.
+rm "$u/addon_data/plugin.video.youtube/api_keys.json"
+printf '{\n    "keys": {\n        "user": {\n            "api_key": "",\n            "client_id": "",\n            "client_secret": ""\n        },\n        "developer": {}\n    }\n}\n' \
+  >"$u/addon_data/plugin.video.youtube/api_keys.json"
+docker run --rm --user "$as_me" -e KODI_SEED_ONLY=1 -e KODI_WEB_PASSWORD=x \
+  -e YOUTUBE_API_KEY=AIzaLATER -e YOUTUBE_CLIENT_ID=456-def -e YOUTUBE_CLIENT_SECRET=GOCSPX-later \
+  -v "$tmp:/home/kodi/.kodi" "$IMAGE" || fail "third start failed"
+grep -q '"api_key": "AIzaLATER"' "$u/addon_data/plugin.video.youtube/api_keys.json" \
+  || fail "keys added later did not replace the add-on's empty store"
+docker run --rm --user "$as_me" -e KODI_SEED_ONLY=1 -e KODI_WEB_PASSWORD=x \
+  -e YOUTUBE_API_KEY=AIzaOTHER -e YOUTUBE_CLIENT_ID=789-ghi -e YOUTUBE_CLIENT_SECRET=GOCSPX-other \
+  -v "$tmp:/home/kodi/.kodi" "$IMAGE" || fail "fourth start failed"
+grep -q '"api_key": "AIzaLATER"' "$u/addon_data/plugin.video.youtube/api_keys.json" \
+  || fail "a key already in the store was overwritten"
+ok "YouTube keys arrive late, and are never overwritten"
+
+# Kodi's Exit (code 0) keeps the container up; a crash exits with its code.
+# A stub kodi on PATH stands in for the real one, which needs a display.
+stub() {
+  docker run --rm --user "$as_me" -e KODI_WEB_PASSWORD=x -v "$tmp:/home/kodi/.kodi" \
+    --entrypoint /bin/sh "$IMAGE" -c "mkdir -p /tmp/bin && printf '#!/bin/sh\nexit $1\n' >/tmp/bin/kodi && chmod +x /tmp/bin/kodi && PATH=/tmp/bin:\$PATH timeout 5 /usr/local/bin/entrypoint.sh"
+}
+set +e
+stub 3 >/dev/null 2>&1; crashed=$?
+stub 0 >/dev/null 2>&1; exited=$?
+set -e
+[ "$crashed" = 3 ] || fail "a crash should exit with Kodi's code, got $crashed"
+[ "$exited" = 124 ] || fail "Kodi's Exit should leave the container running, got $exited"
+ok "Exit releases the display and stays up; a crash restarts"
+
 # No password: the first start refuses rather than run an open web server.
 tmp2=$(mktemp -d); chmod 0777 "$tmp2"
 if docker run --rm --user "$as_me" -e KODI_SEED_ONLY=1 -v "$tmp2:/home/kodi/.kodi" "$IMAGE" 2>/dev/null; then

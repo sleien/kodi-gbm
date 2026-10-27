@@ -69,8 +69,17 @@ fi
 # (kodion/json_store/api_keys.py). The add-on copies these into its settings on
 # its next run. Values are restricted to the characters Google's keys and IDs
 # use, so they need no JSON escaping.
+#
+# Seeded when the store is absent, and also when it holds no personal key: the
+# add-on writes an empty store on its own first run, so keys added to the
+# environment after that would otherwise never arrive. A key set in the add-on
+# is never overwritten.
 YT_DIR=$USERDATA/addon_data/plugin.video.youtube
-if [ ! -f "$YT_DIR/api_keys.json" ] \
+yt_keys_missing() {
+  [ ! -f "$YT_DIR/api_keys.json" ] \
+    || grep -Eq '"api_key"[[:space:]]*:[[:space:]]*""' "$YT_DIR/api_keys.json"
+}
+if yt_keys_missing \
    && [ -n "${YOUTUBE_API_KEY:-}" ] \
    && [ -n "${YOUTUBE_CLIENT_ID:-}" ] \
    && [ -n "${YOUTUBE_CLIENT_SECRET:-}" ]; then
@@ -94,6 +103,21 @@ if [ "${KODI_SEED_ONLY:-0}" = 1 ]; then
   exit 0
 fi
 
-# No kodi-standalone loop: when Kodi exits, the container exits and Docker's
-# restart policy brings it back, so a crash shows in `docker ps` and the logs.
-exec kodi --standalone --windowing=gbm --audio-backend=alsa
+# No kodi-standalone loop. A crash (non-zero) exits the container, so Docker's
+# restart policy brings Kodi back and the crash shows in `docker ps` and the
+# logs.
+#
+# Kodi's own Exit (zero) is the way to the host's console: the container stays
+# up without Kodi, so the restart policy does not put Kodi back over whoever
+# just went there, and the kernel's console takes the display again.
+# `docker restart kodi`, or a reboot, starts Kodi again.
+set +e
+kodi --standalone --windowing=gbm --audio-backend=alsa
+code=$?
+set -e
+if [ "$code" -ne 0 ]; then
+  exit "$code"
+fi
+log "Kodi exited; the display is back on the host console." \
+    "'docker restart kodi' starts Kodi again."
+exec sleep infinity

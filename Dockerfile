@@ -42,4 +42,6 @@ WORKDIR /home/kodi
 # 8080: web server and JSON-RPC over HTTP. 9090: JSON-RPC over TCP/WebSocket.
 EXPOSE 8080 9090
 
-ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
+# -g: signals go to the whole process group, so `docker stop` reaches Kodi,
+# which the entrypoint runs as a child rather than exec'ing.
+ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/usr/local/bin/entrypoint.sh"]
