@@ -84,7 +84,14 @@ Kodi is not running at that moment, so it loads them directly: a new skin
 starts without any dialog. These settings belong to whoever sets the
 environment: a change made on the TV lasts until the next start.
 
-`KODI_SEED_ONLY=1` seeds, applies `KODI_SETTINGS` and exits; the tests use it.
+**`KODI_SOURCES`**, space-separated `type:name:path` entries such as
+`music:Music:/music/`, is merged into `sources.xml` before every start. A
+source whose path is missing from its section is added; nothing is removed,
+and what Kodi or its add-ons wrote there stays. Jellyfin for Kodi keeps its
+own entries in the same file.
+
+`KODI_SEED_ONLY=1` seeds, applies `KODI_SOURCES` and `KODI_SETTINGS`, and
+exits; the tests use it.
 
 **CEC settings are not seeded.** Pulse-Eight's defaults switch the TV on and
 to Kodi's input whenever Kodi starts, which means at every reboot. Set them in

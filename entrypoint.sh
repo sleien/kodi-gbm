@@ -11,6 +11,8 @@
 #                                       three are set
 #   KODI_SETTINGS                       setting.id=value pairs written into
 #                                       guisettings.xml on every start
+#   KODI_SOURCES                        type:name:path entries added to
+#                                       sources.xml if their path is missing
 #   KODI_SEED_ONLY=1                    seed, then exit instead of starting Kodi
 set -eu
 
@@ -105,6 +107,10 @@ fi
 # Written into guisettings.xml before every start of Kodi, while it is not
 # running (lib/apply_settings.py).
 apply_settings() {
+  if [ -n "${KODI_SOURCES:-}" ]; then
+    python3 -I /usr/local/lib/kodi-gbm/add_sources.py "$USERDATA/sources.xml" \
+      || log "KODI_SOURCES not applied: sources.xml unreadable"
+  fi
   [ -n "${KODI_SETTINGS:-}" ] || return 0
   # A guisettings.xml it cannot parse must not keep Kodi from starting.
   python3 -I /usr/local/lib/kodi-gbm/apply_settings.py "$USERDATA/guisettings.xml" \

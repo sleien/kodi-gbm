@@ -131,6 +131,14 @@ grep -q '<setting id="lookandfeel.skin">skin.arctic.zephyr.mod</setting>' "$u/gu
   || fail "KODI_SETTINGS not written into guisettings.xml"
 ok "KODI_SETTINGS applied before Kodi starts"
 
+# KODI_SOURCES is merged into sources.xml.
+docker run --rm --user "$as_me" -e KODI_SEED_ONLY=1 -e KODI_WEB_PASSWORD=x \
+  -e 'KODI_SOURCES=music:Music:/music/' \
+  -v "$tmp:/home/kodi/.kodi" "$IMAGE" 2>/dev/null || fail "start with KODI_SOURCES failed"
+grep -q '<path pathversion="1">/music/</path>' "$u/sources.xml" \
+  || fail "KODI_SOURCES not merged into sources.xml"
+ok "KODI_SOURCES merged into sources.xml"
+
 # No password: the first start refuses rather than run an open web server.
 tmp2=$(mktemp -d); chmod 0777 "$tmp2"
 if docker run --rm --user "$as_me" -e KODI_SEED_ONLY=1 -v "$tmp2:/home/kodi/.kodi" "$IMAGE" 2>/dev/null; then
