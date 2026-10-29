@@ -58,6 +58,14 @@ that appear any other way start disabled.
 
 For example, `KODI_ADDONS="plugin.video.youtube plugin.video.jellyfin"`.
 
+After installing, `service.homelab.setup` applies `KODI_SETTINGS`:
+space-separated `setting.id=value` pairs, for example
+`KODI_SETTINGS="lookandfeel.skin=skin.arctic.zephyr.mod services.webskin=webinterface.tex"`.
+Each one that differs from Kodi's value is set through JSON-RPC on every
+start, so these settings belong to whoever sets the environment, not to the
+TV. A skin switch is confirmed: Kodi's "Switch?" and "Keep this change?"
+dialogs are answered Yes.
+
 ## First start
 
 `entrypoint.sh` seeds three files when they are absent, then starts Kodi.

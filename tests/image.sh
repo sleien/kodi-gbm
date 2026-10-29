@@ -31,6 +31,10 @@ for a in repository.jellyfin.kodi repository.siku2 service.homelab.setup script.
 done
 ok "built-in add-ons enabled by the manifest"
 
+run 'cd /usr/share/kodi/addons/webinterface.default/js && test -s jquery-1.8.2.min.js && test -s iscroll-min.js' \
+  || fail "the built-in web interface's script links dangle"
+ok "built-in web interface complete"
+
 # Single quotes on purpose: the expansion happens inside the container.
 # shellcheck disable=SC2016
 run 'test "$(id -u)" = 1000 && test "$HOME" = /home/kodi' \

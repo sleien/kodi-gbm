@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="service.homelab.setup" name="TV box setup" version="1.0.0" provider-name="sleien">
+<addon id="service.homelab.setup" name="TV box setup" version="1.1.0" provider-name="sleien">
   <requires>
     <import addon="xbmc.python" version="3.0.1"/>
   </requires>
   <extension point="xbmc.service" library="service.py" start="login"/>
   <extension point="xbmc.addon.metadata">
-    <summary lang="en_GB">Installs the add-ons the TV box needs</summary>
-    <description lang="en_GB">On start, installs every add-on named in the KODI_ADDONS environment variable that is not installed yet, through Kodi's own installer and repositories.</description>
+    <summary lang="en_GB">Installs the add-ons and applies the settings the TV box needs</summary>
+    <description lang="en_GB">On start, installs every add-on named in the KODI_ADDONS environment variable that is not installed yet, through Kodi's own installer and repositories, then sets each setting in KODI_SETTINGS (setting.id=value pairs) that differs.</description>
     <platform>all</platform>
     <license>MIT</license>
   </extension>

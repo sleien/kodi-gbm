@@ -19,3 +19,10 @@ if not monitor.waitForAbort(10):
                  xbmc.LOGWARNING)
         xbmc.executebuiltin("Notification(TV setup,Not installed: %s,15000)"
                             % ", ".join(failed))
+    if not monitor.abortRequested():
+        changed, unset = homelab_setup.apply_settings(xbmc, monitor, os.environ)
+        if changed:
+            xbmc.log("homelab setup: set %s" % " ".join(changed), xbmc.LOGINFO)
+        if unset:
+            xbmc.executebuiltin("Notification(TV setup,Settings not applied: %s,15000)"
+                                % ", ".join(unset))

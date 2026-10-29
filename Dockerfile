@@ -10,6 +10,8 @@ FROM debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20b
 # kodi-inputstream-adaptive: DASH playback, which the YouTube add-on needs.
 # kodi-repository-kodi: the official add-on repository, the only one enabled.
 # mesa-va-drivers: VA-API decoding on AMD (radeonsi), the host this is for.
+# libjs-jquery, libjs-iscroll: Debian's built-in web interface links to them
+# instead of bundling copies; without them it loads an empty page.
 # vainfo, alsa-utils, cec-utils: for diagnosing the hardware from a shell in
 # the container (`docker exec kodi vainfo`, `aplay -l`, `cec-client -l`).
 RUN apt-get update \
@@ -21,6 +23,8 @@ RUN apt-get update \
       vainfo \
       alsa-utils \
       cec-utils \
+      libjs-jquery \
+      libjs-iscroll \
       ca-certificates \
       tini \
  && rm -rf /var/lib/apt/lists/*

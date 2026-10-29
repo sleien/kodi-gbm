@@ -33,6 +33,9 @@ class FakeKodi:
 
     def executebuiltin(self, builtin, wait=False):
         self.builtins.append(builtin)
+        if builtin == "SendClick(10100,11)" and self.dialog_for in ("keep skin", "switch skin"):
+            self.dialog_for = None
+            return
         if builtin == "UpdateAddonRepos":
             self.installable |= self.known_after_refresh
         elif builtin.startswith("InstallAddon("):
@@ -42,10 +45,27 @@ class FakeKodi:
         elif builtin == "SendClick(10100,11)":
             assert self.dialog_for, "clicked Yes with no dialog open"
             self.installed.add(self.dialog_for)
-            self.dialog_for = None
+            # Kodi asks to switch after installing a skin.
+            self.dialog_for = "switch skin" if self.dialog_for.startswith("skin.") else None
 
     def log(self, msg, level=0):
         pass
+
+    # Settings over JSON-RPC, as xbmc.executeJSONRPC sees them.
+    settings = None
+
+    def executeJSONRPC(self, request):
+        import json
+        req = json.loads(request)
+        key = req["params"]["setting"]
+        if key not in self.settings:
+            return json.dumps({"id": 1, "error": {"code": -32602, "message": "Invalid params."}})
+        if req["method"] == "Settings.GetSettingValue":
+            return json.dumps({"id": 1, "result": {"value": self.settings[key]}})
+        self.settings[key] = req["params"]["value"]
+        if key == "lookandfeel.skin":
+            self.dialog_for = "keep skin"
+        return json.dumps({"id": 1, "result": True})
 
 
 class FakeMonitor:
@@ -108,6 +128,57 @@ class InstallTests(unittest.TestCase):
         kodi = FakeKodi()
         self.assertEqual(homelab_setup.run(kodi, FakeMonitor(), {}), [])
         self.assertEqual(kodi.builtins, [])
+
+
+class SkinTests(unittest.TestCase):
+    def test_a_skins_switch_dialog_is_answered_after_install(self):
+        kodi = FakeKodi(installable={"skin.arctic.zephyr.mod"})
+        env = {"KODI_ADDONS": "skin.arctic.zephyr.mod"}
+        self.assertEqual(homelab_setup.run(kodi, FakeMonitor(), env, settle=0), [])
+        self.assertIsNone(kodi.dialog_for)
+        self.assertEqual(kodi.builtins.count("SendClick(10100,11)"), 2)
+
+
+class SettingsTests(unittest.TestCase):
+    ENV = {"KODI_SETTINGS": "services.webskin=webinterface.tex "
+                            "videoplayer.adjustrefreshrate=0 "
+                            "services.zeroconf=false"}
+
+    def kodi(self, **settings):
+        kodi = FakeKodi()
+        kodi.settings = dict(settings)
+        return kodi
+
+    def test_sets_what_differs_with_kodis_types(self):
+        kodi = self.kodi(**{"services.webskin": "webinterface.default",
+                            "videoplayer.adjustrefreshrate": 2,
+                            "services.zeroconf": True})
+        changed, failed = homelab_setup.apply_settings(kodi, FakeMonitor(), self.ENV)
+        self.assertEqual(failed, [])
+        self.assertEqual(changed, ["services.webskin", "videoplayer.adjustrefreshrate",
+                                   "services.zeroconf"])
+        self.assertEqual(kodi.settings, {"services.webskin": "webinterface.tex",
+                                         "videoplayer.adjustrefreshrate": 0,
+                                         "services.zeroconf": False})
+
+    def test_leaves_what_already_matches(self):
+        kodi = self.kodi(**{"services.webskin": "webinterface.tex",
+                            "videoplayer.adjustrefreshrate": 0,
+                            "services.zeroconf": False})
+        self.assertEqual(homelab_setup.apply_settings(kodi, FakeMonitor(), self.ENV), ([], []))
+
+    def test_an_unknown_setting_is_reported_not_fatal(self):
+        kodi = self.kodi(**{"services.webskin": "webinterface.default"})
+        env = {"KODI_SETTINGS": "no.such.setting=1 services.webskin=webinterface.tex"}
+        changed, failed = homelab_setup.apply_settings(kodi, FakeMonitor(), env)
+        self.assertEqual((changed, failed), (["services.webskin"], ["no.such.setting"]))
+
+    def test_switching_skin_confirms_keep(self):
+        kodi = self.kodi(**{"lookandfeel.skin": "skin.estuary"})
+        env = {"KODI_SETTINGS": "lookandfeel.skin=skin.arctic.zephyr.mod"}
+        homelab_setup.apply_settings(kodi, FakeMonitor(), env, skin_confirm=3)
+        self.assertEqual(kodi.settings["lookandfeel.skin"], "skin.arctic.zephyr.mod")
+        self.assertIsNone(kodi.dialog_for)
 
 
 if __name__ == "__main__":
