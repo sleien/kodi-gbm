@@ -1,22 +1,21 @@
-"""Installs the add-ons in KODI_ADDONS and applies the settings in KODI_SETTINGS.
+"""Installs the add-ons in KODI_ADDONS through Kodi's own installer.
 
 Kodi has no unattended install: the InstallAddon builtin asks "Do you want to
 install …?" first. This answers that dialog with Yes, so dependencies are
 resolved by Kodi exactly as for an install made by hand. Add-ons already
 present are skipped, so it does nothing on every start after the first.
 
-KODI_SETTINGS holds space-separated `setting.id=value` pairs. Each is set
-through JSON-RPC whenever Kodi's value differs, so the stack's compose file
-stays the one home for them: a change made on the TV to one of these settings
-lasts until the next start. A skin, installed or switched to, makes Kodi ask
-"Switch to this skin?" and "Keep this change?"; both are answered Yes.
+A skin, once installed, makes Kodi offer "Switch to it now?". That is
+answered No: switching a running Kodi brings a "Keep this change?" dialog and
+a race with the skin's own start-up scripts. Skins are chosen by KODI_SETTINGS
+instead, which the entrypoint writes before Kodi starts; when something just
+installed is named there, Kodi is restarted so it takes effect.
 
 Kept free of Kodi imports so it can be tested with a fake `xbmc` module.
 """
-import json
-
 YESNO_DIALOG = 10100  # WINDOW_DIALOG_YES_NO
 YES_BUTTON = 11       # CGUIDialogYesNo's Yes button
+NO_BUTTON = 10
 
 
 def wanted(environ):
@@ -28,18 +27,19 @@ def missing(xbmc, addon_ids):
             if not xbmc.getCondVisibility("System.HasAddon(%s)" % a)]
 
 
-def confirm_dialogs(xbmc, monitor, seconds, poll=1):
-    """Answer Yes to every Yes/No dialog that opens within `seconds`."""
+def decline_dialog(xbmc, monitor, seconds, poll=1):
+    """Answer No to the first Yes/No dialog that opens within `seconds`."""
     waited = 0
     while waited < seconds:
         if xbmc.getCondVisibility("Window.IsActive(%d)" % YESNO_DIALOG):
-            xbmc.executebuiltin("SendClick(%d,%d)" % (YESNO_DIALOG, YES_BUTTON))
+            xbmc.executebuiltin("SendClick(%d,%d)" % (YESNO_DIALOG, NO_BUTTON))
+            return
         if monitor.waitForAbort(poll):
             return
         waited += poll
 
 
-def install(xbmc, monitor, addon_id, timeout=300, poll=1, skin_confirm=20):
+def install(xbmc, monitor, addon_id, timeout=300, poll=1, skin_prompt=60):
     """Install one add-on; True once Kodi reports it installed."""
     xbmc.executebuiltin("InstallAddon(%s)" % addon_id)
     confirmed = False
@@ -47,7 +47,8 @@ def install(xbmc, monitor, addon_id, timeout=300, poll=1, skin_confirm=20):
     while waited < timeout:
         if xbmc.getCondVisibility("System.HasAddon(%s)" % addon_id):
             if addon_id.startswith("skin."):
-                confirm_dialogs(xbmc, monitor, skin_confirm, poll)
+                # "Switch to it now?" comes once its dependencies are in.
+                decline_dialog(xbmc, monitor, skin_prompt, poll)
             return True
         if not confirmed and xbmc.getCondVisibility(
                 "Window.IsActive(%d)" % YESNO_DIALOG):
@@ -78,48 +79,9 @@ def run(xbmc, monitor, environ, attempts=3, settle=20):
     return todo
 
 
-def wanted_settings(environ):
-    pairs = []
+def needs_restart(installed, environ):
+    """Installed add-ons that KODI_SETTINGS names, e.g. a skin to switch to."""
+    named = set()
     for item in environ.get("KODI_SETTINGS", "").split():
-        key, sep, value = item.partition("=")
-        if sep and key:
-            pairs.append((key, value))
-    return pairs
-
-
-def rpc(xbmc, method, params):
-    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-    response = json.loads(xbmc.executeJSONRPC(json.dumps(request)))
-    if "error" in response:
-        raise RuntimeError("%s: %s" % (method, response["error"]))
-    return response["result"]
-
-
-def coerce(current, value):
-    """The text from KODI_SETTINGS, as the type Kodi holds the setting in."""
-    if isinstance(current, bool):
-        return value.lower() in ("true", "1", "yes", "on")
-    if isinstance(current, int):
-        return int(value)
-    if isinstance(current, float):
-        return float(value)
-    return value
-
-
-def apply_settings(xbmc, monitor, environ, skin_confirm=20):
-    """Set what differs; returns (changed, failed) setting IDs."""
-    changed, failed = [], []
-    for key, text in wanted_settings(environ):
-        try:
-            current = rpc(xbmc, "Settings.GetSettingValue", {"setting": key})["value"]
-            value = coerce(current, text)
-            if current == value:
-                continue
-            rpc(xbmc, "Settings.SetSettingValue", {"setting": key, "value": value})
-            changed.append(key)
-            if key == "lookandfeel.skin":
-                confirm_dialogs(xbmc, monitor, skin_confirm)
-        except (RuntimeError, ValueError, KeyError) as e:
-            xbmc.log("homelab setup: setting %s: %s" % (key, e), xbmc.LOGWARNING)
-            failed.append(key)
-    return changed, failed
+        named.add(item.partition("=")[2])
+    return [a for a in installed if a in named]

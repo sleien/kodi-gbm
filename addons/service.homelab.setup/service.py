@@ -13,16 +13,21 @@ import homelab_setup  # noqa: E402
 monitor = xbmc.Monitor()
 # Let the home screen and the repository check that Kodi runs at start settle.
 if not monitor.waitForAbort(10):
+    before = homelab_setup.missing(xbmc, homelab_setup.wanted(os.environ))
     failed = homelab_setup.run(xbmc, monitor, os.environ)
     if failed:
         xbmc.log("homelab setup: not installed: %s" % " ".join(failed),
                  xbmc.LOGWARNING)
         xbmc.executebuiltin("Notification(TV setup,Not installed: %s,15000)"
                             % ", ".join(failed))
-    if not monitor.abortRequested():
-        changed, unset = homelab_setup.apply_settings(xbmc, monitor, os.environ)
-        if changed:
-            xbmc.log("homelab setup: set %s" % " ".join(changed), xbmc.LOGINFO)
-        if unset:
-            xbmc.executebuiltin("Notification(TV setup,Settings not applied: %s,15000)"
-                                % ", ".join(unset))
+    installed = [a for a in before if a not in failed]
+    restart_for = homelab_setup.needs_restart(installed, os.environ)
+    if restart_for and not monitor.abortRequested():
+        # The entrypoint applies KODI_SETTINGS before Kodi starts; a restart
+        # is what puts a just-installed skin or web interface in use.
+        xbmc.log("homelab setup: restarting Kodi for %s" % " ".join(restart_for),
+                 xbmc.LOGINFO)
+        xbmc.executebuiltin("Notification(TV setup,Restarting to apply %s,5000)"
+                            % ", ".join(restart_for))
+        if not monitor.waitForAbort(5):
+            xbmc.executebuiltin("RestartApp")

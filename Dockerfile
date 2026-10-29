@@ -60,6 +60,7 @@ RUN groupadd --gid 1000 kodi \
  && chmod 0755 /home/kodi
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY lib/apply_settings.py /usr/local/lib/kodi-gbm/apply_settings.py
 
 ENV HOME=/home/kodi
 USER 1000:1000

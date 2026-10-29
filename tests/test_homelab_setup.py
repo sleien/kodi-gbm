@@ -33,7 +33,8 @@ class FakeKodi:
 
     def executebuiltin(self, builtin, wait=False):
         self.builtins.append(builtin)
-        if builtin == "SendClick(10100,11)" and self.dialog_for in ("keep skin", "switch skin"):
+        if builtin == "SendClick(10100,10)":
+            assert self.dialog_for == "switch skin", "declined a dialog that is not the skin's"
             self.dialog_for = None
             return
         if builtin == "UpdateAddonRepos":
@@ -50,22 +51,6 @@ class FakeKodi:
 
     def log(self, msg, level=0):
         pass
-
-    # Settings over JSON-RPC, as xbmc.executeJSONRPC sees them.
-    settings = None
-
-    def executeJSONRPC(self, request):
-        import json
-        req = json.loads(request)
-        key = req["params"]["setting"]
-        if key not in self.settings:
-            return json.dumps({"id": 1, "error": {"code": -32602, "message": "Invalid params."}})
-        if req["method"] == "Settings.GetSettingValue":
-            return json.dumps({"id": 1, "result": {"value": self.settings[key]}})
-        self.settings[key] = req["params"]["value"]
-        if key == "lookandfeel.skin":
-            self.dialog_for = "keep skin"
-        return json.dumps({"id": 1, "result": True})
 
 
 class FakeMonitor:
@@ -131,54 +116,28 @@ class InstallTests(unittest.TestCase):
 
 
 class SkinTests(unittest.TestCase):
-    def test_a_skins_switch_dialog_is_answered_after_install(self):
+    def test_a_skins_switch_prompt_is_declined(self):
         kodi = FakeKodi(installable={"skin.arctic.zephyr.mod"})
         env = {"KODI_ADDONS": "skin.arctic.zephyr.mod"}
         self.assertEqual(homelab_setup.run(kodi, FakeMonitor(), env, settle=0), [])
         self.assertIsNone(kodi.dialog_for)
-        self.assertEqual(kodi.builtins.count("SendClick(10100,11)"), 2)
+        self.assertEqual(kodi.builtins.count("SendClick(10100,11)"), 1)
+        self.assertEqual(kodi.builtins.count("SendClick(10100,10)"), 1)
 
 
-class SettingsTests(unittest.TestCase):
-    ENV = {"KODI_SETTINGS": "services.webskin=webinterface.tex "
-                            "videoplayer.adjustrefreshrate=0 "
-                            "services.zeroconf=false"}
+class RestartTests(unittest.TestCase):
+    ENV = {"KODI_SETTINGS": "lookandfeel.skin=skin.arctic.zephyr.mod "
+                            "services.webskin=webinterface.tex "
+                            "videoplayer.adjustrefreshrate=0"}
 
-    def kodi(self, **settings):
-        kodi = FakeKodi()
-        kodi.settings = dict(settings)
-        return kodi
+    def test_restart_when_a_new_addon_is_a_setting(self):
+        self.assertEqual(homelab_setup.needs_restart(
+            ["plugin.video.youtube", "skin.arctic.zephyr.mod", "webinterface.tex"], self.ENV),
+            ["skin.arctic.zephyr.mod", "webinterface.tex"])
 
-    def test_sets_what_differs_with_kodis_types(self):
-        kodi = self.kodi(**{"services.webskin": "webinterface.default",
-                            "videoplayer.adjustrefreshrate": 2,
-                            "services.zeroconf": True})
-        changed, failed = homelab_setup.apply_settings(kodi, FakeMonitor(), self.ENV)
-        self.assertEqual(failed, [])
-        self.assertEqual(changed, ["services.webskin", "videoplayer.adjustrefreshrate",
-                                   "services.zeroconf"])
-        self.assertEqual(kodi.settings, {"services.webskin": "webinterface.tex",
-                                         "videoplayer.adjustrefreshrate": 0,
-                                         "services.zeroconf": False})
-
-    def test_leaves_what_already_matches(self):
-        kodi = self.kodi(**{"services.webskin": "webinterface.tex",
-                            "videoplayer.adjustrefreshrate": 0,
-                            "services.zeroconf": False})
-        self.assertEqual(homelab_setup.apply_settings(kodi, FakeMonitor(), self.ENV), ([], []))
-
-    def test_an_unknown_setting_is_reported_not_fatal(self):
-        kodi = self.kodi(**{"services.webskin": "webinterface.default"})
-        env = {"KODI_SETTINGS": "no.such.setting=1 services.webskin=webinterface.tex"}
-        changed, failed = homelab_setup.apply_settings(kodi, FakeMonitor(), env)
-        self.assertEqual((changed, failed), (["services.webskin"], ["no.such.setting"]))
-
-    def test_switching_skin_confirms_keep(self):
-        kodi = self.kodi(**{"lookandfeel.skin": "skin.estuary"})
-        env = {"KODI_SETTINGS": "lookandfeel.skin=skin.arctic.zephyr.mod"}
-        homelab_setup.apply_settings(kodi, FakeMonitor(), env, skin_confirm=3)
-        self.assertEqual(kodi.settings["lookandfeel.skin"], "skin.arctic.zephyr.mod")
-        self.assertIsNone(kodi.dialog_for)
+    def test_no_restart_for_other_addons(self):
+        self.assertEqual(homelab_setup.needs_restart(["plugin.video.youtube"], self.ENV), [])
+        self.assertEqual(homelab_setup.needs_restart([], self.ENV), [])
 
 
 if __name__ == "__main__":

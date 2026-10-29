@@ -58,13 +58,12 @@ that appear any other way start disabled.
 
 For example, `KODI_ADDONS="plugin.video.youtube plugin.video.jellyfin"`.
 
-After installing, `service.homelab.setup` applies `KODI_SETTINGS`:
-space-separated `setting.id=value` pairs, for example
-`KODI_SETTINGS="lookandfeel.skin=skin.arctic.zephyr.mod services.webskin=webinterface.tex"`.
-Each one that differs from Kodi's value is set through JSON-RPC on every
-start, so these settings belong to whoever sets the environment, not to the
-TV. A skin switch is confirmed: Kodi's "Switch?" and "Keep this change?"
-dialogs are answered Yes.
+A skin offers "Switch to it now?" once installed; the service answers No.
+Switching a running Kodi brings a "Keep this change?" dialog and races the
+skin's own start-up scripts. One skin's menu builder once wrote into the
+previous skin's read-only folder that way. Skins and other settings come from
+`KODI_SETTINGS` instead (next section). When something just installed is
+named there, the service restarts Kodi so it takes effect.
 
 ## First start
 
@@ -77,7 +76,15 @@ After that, Kodi owns them, and changes made on the TV win.
 | `userdata/favourites.xml` | `/seed/favourites.xml`, if mounted | the home screen's favourites |
 | `userdata/addon_data/plugin.video.youtube/api_keys.json` | `YOUTUBE_API_KEY`, `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, all three | personal API keys for the YouTube add-on, in its 7.x store format. Also written over the add-on's own empty store, so keys can arrive after the first start; a key already set is never replaced |
 
-`KODI_SEED_ONLY=1` seeds and exits; the tests use it.
+**`KODI_SETTINGS`**, space-separated `setting.id=value` pairs as
+`guisettings.xml` stores them, is written into `guisettings.xml` before every
+start of Kodi, for example
+`KODI_SETTINGS="lookandfeel.skin=skin.arctic.zephyr.mod services.webskin=webinterface.tex"`.
+Kodi is not running at that moment, so it loads them directly: a new skin
+starts without any dialog. These settings belong to whoever sets the
+environment: a change made on the TV lasts until the next start.
+
+`KODI_SEED_ONLY=1` seeds, applies `KODI_SETTINGS` and exits; the tests use it.
 
 **CEC settings are not seeded.** Pulse-Eight's defaults switch the TV on and
 to Kodi's input whenever Kodi starts, which means at every reboot. Set them in
@@ -89,6 +96,11 @@ menu ends Kodi with code 0. The container then stays up without Kodi, the
 display goes back to the kernel's text console, and a keyboard on the host
 reaches its login prompt. `docker restart kodi`, or a reboot, starts Kodi
 again.
+
+**RestartApp** (exit code 65) starts Kodi again inside the container, with
+`KODI_SETTINGS` written first. Kodi's binary is run directly rather than
+Debian's `/usr/bin/kodi` wrapper, which would restart it on 65 without the
+entrypoint seeing it.
 
 **A crash exits the container** with Kodi's code. The restart policy brings it
 back, and the crash shows in `docker ps` and in the logs. There is no restart

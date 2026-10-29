@@ -9,6 +9,8 @@
 #   YOUTUBE_API_KEY, YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET
 #                                       personal API keys; seeded only if all
 #                                       three are set
+#   KODI_SETTINGS                       setting.id=value pairs written into
+#                                       guisettings.xml on every start
 #   KODI_SEED_ONLY=1                    seed, then exit instead of starting Kodi
 set -eu
 
@@ -99,22 +101,46 @@ EOF
   esac
 fi
 
+# --- KODI_SETTINGS ----------------------------------------------------------
+# Written into guisettings.xml before every start of Kodi, while it is not
+# running (lib/apply_settings.py).
+apply_settings() {
+  [ -n "${KODI_SETTINGS:-}" ] || return 0
+  # A guisettings.xml it cannot parse must not keep Kodi from starting.
+  python3 -I /usr/local/lib/kodi-gbm/apply_settings.py "$USERDATA/guisettings.xml" \
+    || log "KODI_SETTINGS not applied: guisettings.xml unreadable"
+}
+
 if [ "${KODI_SEED_ONLY:-0}" = 1 ]; then
+  apply_settings
   exit 0
 fi
 
-# No kodi-standalone loop. A crash (non-zero) exits the container, so Docker's
-# restart policy brings Kodi back and the crash shows in `docker ps` and the
-# logs.
-#
-# Kodi's own Exit (zero) is the way to the host's console: the container stays
-# up without Kodi, so the restart policy does not put Kodi back over whoever
-# just went there, and the kernel's console takes the display again.
-# `docker restart kodi`, or a reboot, starts Kodi again.
-set +e
-kodi --standalone --windowing=gbm --audio-backend=alsa
-code=$?
-set -e
+# Kodi's binary, not Debian's /usr/bin/kodi wrapper: the wrapper restarts
+# Kodi itself on exit code 65 (RestartApp), and KODI_SETTINGS has to be
+# written before each start. The wrapper's one relevant setting is the malloc
+# threshold below.
+KODI_BIN=${KODI_BIN:-/usr/lib/x86_64-linux-gnu/kodi/kodi.bin}
+export MALLOC_MMAP_THRESHOLD_=131072
+
+# Exit codes:
+#  65 (RestartApp, used by the setup service after installing a skin):
+#     start again here, with KODI_SETTINGS written first.
+#  0  (Kodi's own Exit) is the way to the host's console: the container stays
+#     up without Kodi, so the restart policy does not put Kodi back over
+#     whoever just went there, and the kernel's console takes the display
+#     again. `docker restart kodi`, or a reboot, starts Kodi again.
+#  anything else is a crash: the container exits, Docker's restart policy
+#     brings it back, and the crash shows in `docker ps` and the logs.
+while :; do
+  apply_settings
+  set +e
+  "$KODI_BIN" --standalone --windowing=gbm --audio-backend=alsa
+  code=$?
+  set -e
+  [ "$code" -eq 65 ] || break
+  log "Kodi asked to restart; starting it again"
+done
 if [ "$code" -ne 0 ]; then
   exit "$code"
 fi

@@ -96,8 +96,9 @@ ok "YouTube keys arrive late, and are never overwritten"
 # Kodi's Exit (code 0) keeps the container up; a crash exits with its code.
 # A stub kodi on PATH stands in for the real one, which needs a display.
 stub() {
-  docker run --rm --user "$as_me" -e KODI_WEB_PASSWORD=x -v "$tmp:/home/kodi/.kodi" \
-    --entrypoint /bin/sh "$IMAGE" -c "mkdir -p /tmp/bin && printf '#!/bin/sh\nexit $1\n' >/tmp/bin/kodi && chmod +x /tmp/bin/kodi && PATH=/tmp/bin:\$PATH timeout 5 /usr/local/bin/entrypoint.sh"
+  docker run --rm --user "$as_me" -e KODI_WEB_PASSWORD=x -e KODI_BIN=/tmp/kodi \
+    -v "$tmp:/home/kodi/.kodi" --entrypoint /bin/sh "$IMAGE" \
+    -c "printf '#!/bin/sh\nexit $1\n' >/tmp/kodi && chmod +x /tmp/kodi && timeout 5 /usr/local/bin/entrypoint.sh"
 }
 set +e
 stub 3 >/dev/null 2>&1; crashed=$?
@@ -106,6 +107,29 @@ set -e
 [ "$crashed" = 3 ] || fail "a crash should exit with Kodi's code, got $crashed"
 [ "$exited" = 124 ] || fail "Kodi's Exit should leave the container running, got $exited"
 ok "Exit releases the display and stays up; a crash restarts"
+
+# RestartApp (65) starts Kodi again inside the container, settings written
+# first: a stub that restarts once, then crashes, is run twice.
+rm -f "$u/guisettings.xml"
+set +e
+docker run --rm --user "$as_me" -e KODI_WEB_PASSWORD=x -e KODI_BIN=/tmp/kodi \
+  -e 'KODI_SETTINGS=services.webskin=webinterface.tex' \
+  -v "$tmp:/home/kodi/.kodi" --entrypoint /bin/sh "$IMAGE" \
+  -c "printf '#!/bin/sh\necho run >>/home/kodi/.kodi/runs\n[ \$(wc -l </home/kodi/.kodi/runs) -ge 2 ] && exit 3\nexit 65\n' >/tmp/kodi && chmod +x /tmp/kodi && timeout 10 /usr/local/bin/entrypoint.sh" >/dev/null 2>&1
+restarted=$?
+set -e
+[ "$restarted" = 3 ] || fail "after RestartApp the second run should end the container with 3, got $restarted"
+[ "$(wc -l <"$tmp/runs")" -eq 2 ] || fail "Kodi was not started again after RestartApp"
+ok "RestartApp starts Kodi again with KODI_SETTINGS"
+
+# KODI_SETTINGS is written into guisettings.xml before Kodi starts, each start.
+rm -f "$u/guisettings.xml"
+docker run --rm --user "$as_me" -e KODI_SEED_ONLY=1 -e KODI_WEB_PASSWORD=x \
+  -e 'KODI_SETTINGS=lookandfeel.skin=skin.arctic.zephyr.mod services.webskin=webinterface.tex' \
+  -v "$tmp:/home/kodi/.kodi" "$IMAGE" 2>/dev/null || fail "start with KODI_SETTINGS failed"
+grep -q '<setting id="lookandfeel.skin">skin.arctic.zephyr.mod</setting>' "$u/guisettings.xml" \
+  || fail "KODI_SETTINGS not written into guisettings.xml"
+ok "KODI_SETTINGS applied before Kodi starts"
 
 # No password: the first start refuses rather than run an open web server.
 tmp2=$(mktemp -d); chmod 0777 "$tmp2"
