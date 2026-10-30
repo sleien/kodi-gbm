@@ -140,5 +140,65 @@ class RestartTests(unittest.TestCase):
         self.assertEqual(homelab_setup.needs_restart([], self.ENV), [])
 
 
+class FakeDisplayKodi(FakeKodi):
+    """Kodi's screen mode setting: setting it opens "Keep this resolution?" and
+    blocks until the dialog closes; No (or the timeout) reverts it."""
+
+    def __init__(self, mode):
+        super().__init__()
+        self.mode = mode
+        self.modesets = []
+
+    def executeJSONRPC(self, request):
+        import json
+        import time
+        req = json.loads(request)
+        if req["method"] == "Settings.GetSettingValue":
+            return json.dumps({"id": 1, "result": {"value": self.mode}})
+        previous, self.mode = self.mode, req["params"]["value"]
+        self.modesets.append(self.mode)
+        self.dialog_for = "keep resolution"
+        for _ in range(200):
+            if self.dialog_for is None:
+                break
+            time.sleep(0.01)
+        self.mode = previous
+        self.modesets.append(previous)
+        return json.dumps({"id": 1, "result": True})
+
+    def executebuiltin(self, builtin, wait=False):
+        self.builtins.append(builtin)
+        if builtin == "SendClick(10100,10)" and self.dialog_for == "keep resolution":
+            self.dialog_for = None
+
+
+class SleepingMonitor:
+    """Waits for real, as Kodi's xbmc.Monitor does."""
+
+    def waitForAbort(self, seconds):
+        import time
+        time.sleep(seconds)
+        return False
+
+
+class KickTests(unittest.TestCase):
+    def test_sets_the_mode_twice_and_ends_where_it_was(self):
+        import threading
+        kodi = FakeDisplayKodi("0384002160060.00000pstd")
+        back = homelab_setup.kick_display(kodi, SleepingMonitor(), "0192001080060.00000pstd",
+                                          threading, timeout=2, poll=0.01)
+        self.assertTrue(back)
+        self.assertEqual(kodi.modesets, ["0192001080060.00000pstd", "0384002160060.00000pstd"])
+        self.assertIn("SendClick(10100,10)", kodi.builtins)
+        self.assertIsNone(kodi.dialog_for)
+
+    def test_nothing_when_already_in_the_kick_mode(self):
+        import threading
+        kodi = FakeDisplayKodi("0192001080060.00000pstd")
+        self.assertFalse(homelab_setup.kick_display(kodi, SleepingMonitor(), "0192001080060.00000pstd",
+                                                    threading, timeout=1, poll=0.01))
+        self.assertEqual(kodi.modesets, [])
+
+
 if __name__ == "__main__":
     unittest.main()

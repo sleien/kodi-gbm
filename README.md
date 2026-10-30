@@ -58,6 +58,15 @@ that appear any other way start disabled.
 
 For example, `KODI_ADDONS="plugin.video.youtube plugin.video.jellyfin"`.
 
+**`KODI_DISPLAY_KICK`**, a screen mode such as `0192001080060.00000pstd`,
+makes the service set the display mode twice right after start: to that
+mode, then straight back, answering Kodi's "Keep this resolution?" with No.
+On a Radeon 780M with kernel 6.8, Kodi's first atomic commit fails
+(`test commit failed ... falling back to last successful atomic request`).
+Its render loop then stays at 25 fps, so 60 fps video falls behind its
+sound, until a mode is set again. Leave it unset where Kodi's log shows no
+failed first commit.
+
 A skin offers "Switch to it now?" once installed; the service answers No.
 Switching a running Kodi brings a "Keep this change?" dialog and races the
 skin's own start-up scripts. One skin's menu builder once wrote into the

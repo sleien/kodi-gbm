@@ -1,6 +1,7 @@
 """Installs the TV box's add-ons on Kodi's start (resources/lib/homelab_setup.py)."""
 import os
 import sys
+import threading
 
 import xbmc
 import xbmcaddon
@@ -13,6 +14,14 @@ import homelab_setup  # noqa: E402
 monitor = xbmc.Monitor()
 # Let the home screen and the repository check that Kodi runs at start settle.
 if not monitor.waitForAbort(10):
+    kick = os.environ.get("KODI_DISPLAY_KICK", "")
+    if kick:
+        try:
+            back = homelab_setup.kick_display(xbmc, monitor, kick, threading)
+            xbmc.log("homelab setup: display mode set twice via %s, back: %s"
+                     % (kick, back), xbmc.LOGINFO)
+        except Exception as e:  # never keep the installs from running
+            xbmc.log("homelab setup: display kick failed: %s" % e, xbmc.LOGWARNING)
     before = homelab_setup.missing(xbmc, homelab_setup.wanted(os.environ))
     failed = homelab_setup.run(xbmc, monitor, os.environ)
     if failed:

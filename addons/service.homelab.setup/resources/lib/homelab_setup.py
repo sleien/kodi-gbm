@@ -11,8 +11,12 @@ a race with the skin's own start-up scripts. Skins are chosen by KODI_SETTINGS
 instead, which the entrypoint writes before Kodi starts; when something just
 installed is named there, Kodi is restarted so it takes effect.
 
+With KODI_DISPLAY_KICK set to a screen mode, the display mode is set twice
+right after start, through that mode and back (kick_display); see there.
+
 Kept free of Kodi imports so it can be tested with a fake `xbmc` module.
 """
+import json
 YESNO_DIALOG = 10100  # WINDOW_DIALOG_YES_NO
 YES_BUTTON = 11       # CGUIDialogYesNo's Yes button
 NO_BUTTON = 10
@@ -85,3 +89,33 @@ def needs_restart(installed, environ):
     for item in environ.get("KODI_SETTINGS", "").split():
         named.add(item.partition("=")[2])
     return [a for a in installed if a in named]
+
+
+def kick_display(xbmc, monitor, temp_mode, threading, timeout=20, poll=0.5):
+    """Switch to `temp_mode` and straight back, so Kodi sets the mode twice.
+
+    On homeserver-01 (Radeon 780M, kernel 6.8), Kodi's first atomic commit
+    after start fails ("test commit failed ... falling back to last successful
+    atomic request") and its render loop then stays at 25 fps until a mode is
+    set again. Setting `videoscreen.screenmode` opens Kodi's "Keep this
+    resolution?" dialog and blocks the JSON-RPC call until it closes; a
+    second thread answers it No, so Kodi returns to the configured mode at
+    once. Returns True when the mode is back where it was.
+    """
+    before = rpc(xbmc, "Settings.GetSettingValue", {"setting": "videoscreen.screenmode"})["value"]
+    if before == temp_mode:
+        return False
+    answer = threading.Thread(target=decline_dialog, args=(xbmc, monitor, timeout, poll))
+    answer.start()
+    rpc(xbmc, "Settings.SetSettingValue", {"setting": "videoscreen.screenmode", "value": temp_mode})
+    answer.join(timeout)
+    after = rpc(xbmc, "Settings.GetSettingValue", {"setting": "videoscreen.screenmode"})["value"]
+    return after == before
+
+
+def rpc(xbmc, method, params):
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    response = json.loads(xbmc.executeJSONRPC(json.dumps(request)))
+    if "error" in response:
+        raise RuntimeError("%s: %s" % (method, response["error"]))
+    return response["result"]
