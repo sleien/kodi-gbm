@@ -31,6 +31,7 @@ FROM debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20b
 
 # kodi-inputstream-adaptive: DASH playback, which the YouTube add-on needs.
 # kodi-repository-kodi: the official add-on repository, the only one enabled.
+# kodi-peripheral-joystick: game controllers drive Kodi's menus too.
 # mesa-va-drivers: VA-API decoding on AMD (radeonsi), the host this is for.
 # libjs-jquery, libjs-iscroll: Debian's built-in web interface links to them
 # instead of bundling copies; without them it loads an empty page.
@@ -41,6 +42,7 @@ RUN apt-get update \
       kodi \
       kodi-inputstream-adaptive \
       kodi-repository-kodi \
+      kodi-peripheral-joystick \
       mesa-va-drivers \
       vainfo \
       alsa-utils \

@@ -25,6 +25,12 @@ run 'ls /usr/lib/x86_64-linux-gnu/kodi/addons/inputstream.adaptive/' \
   || fail "inputstream.adaptive not installed"
 ok "inputstream.adaptive"
 
+run 'test -d /usr/lib/x86_64-linux-gnu/kodi/addons/peripheral.joystick' \
+  || fail "peripheral.joystick not installed"
+run 'grep -q "<addon optional=\"true\">peripheral.joystick</addon>" /usr/share/kodi/system/addon-manifest.xml' \
+  || fail "peripheral.joystick is not enabled by the manifest"
+ok "peripheral.joystick"
+
 for a in repository.jellyfin.kodi repository.siku2 service.homelab.setup script.homelab.cec script.homelab.games; do
   run "test -f /usr/share/kodi/addons/$a/addon.xml && grep -q '<addon optional=\"true\">$a</addon>' /usr/share/kodi/system/addon-manifest.xml" \
     || fail "$a is not built in and listed in the manifest"
@@ -147,6 +153,19 @@ grep -qx 'XDG_CONFIG_HOME=/home/kodi/.kodi/moonlight' "$tmp/moonlight-args" \
   || fail "Moonlight's pairing would not persist"
 [ ! -f "$tmp/temp/kodi-gbm-launch" ] || fail "launch note left behind"
 ok "a launch note hands the display to Moonlight, then Kodi returns"
+
+# A Moonlight that fails to connect is ended, and Kodi comes back: the stub
+# prints Moonlight's failure line and would then wait forever on its dialog.
+rm -f "$tmp/kruns"
+set +e
+docker run --rm --user "$as_me" -e KODI_WEB_PASSWORD=x -e KODI_BIN=/tmp/kodi \
+  -e MOONLIGHT_BIN=/tmp/moonlight -e MOONLIGHT_HOST=192.0.2.5 -e MOONLIGHT_ERROR_GRACE=1 \
+  -v "$tmp:/home/kodi/.kodi" --entrypoint /bin/sh "$IMAGE" \
+  -c "mkdir -p /home/kodi/.kodi/temp; printf '#!/bin/sh\necho run >>/home/kodi/.kodi/kruns\n[ \$(wc -l </home/kodi/.kodi/kruns) -ge 2 ] && exit 3\necho stream >/home/kodi/.kodi/temp/kodi-gbm-launch\nexit 0\n' >/tmp/kodi; printf '#!/bin/sh\necho \"00:00:30 - Qt Critical: Failed to connect to 192.0.2.5\"\nexec sleep 600\n' >/tmp/moonlight; chmod +x /tmp/kodi /tmp/moonlight; timeout 20 /usr/local/bin/entrypoint.sh" >/dev/null 2>&1
+recovered=$?
+set -e
+[ "$recovered" = 3 ] || fail "a failed Moonlight start should hand back to Kodi (expected 3), got $recovered"
+ok "a failed Moonlight start is ended and Kodi returns"
 
 # KODI_SETTINGS is written into guisettings.xml before Kodi starts, each start.
 rm -f "$u/guisettings.xml"

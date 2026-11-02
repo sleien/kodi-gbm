@@ -152,13 +152,38 @@ run_moonlight() (
       "$MOONLIGHT_BIN" pair "$MOONLIGHT_HOST" --pin "$_pin"
       ;;
     stream)
+      # Moonlight's error dialogs ("Failed to connect to ...") take no gamepad
+      # input without a desktop, so a failed start would hold the screen until
+      # someone with a keyboard came along. Until the video stream has started,
+      # a "Qt Critical" line ends Moonlight after 10 s and Kodi comes back.
+      _log=/tmp/moonlight.log
+      : >"$_log"
       # MOONLIGHT_OPTIONS is split into words on purpose: it holds flags.
       # shellcheck disable=SC2086
       "$MOONLIGHT_BIN" stream "$MOONLIGHT_HOST" "${MOONLIGHT_APP:-Steam Big Picture}" \
-        ${MOONLIGHT_OPTIONS:-}
+        ${MOONLIGHT_OPTIONS:-} >"$_log" 2>&1 &
+      _pid=$!
+      tail -n +1 -f "$_log" >&2 &
+      _tail=$!
+      while kill -0 "$_pid" 2>/dev/null; do
+        if grep -qi "video stream" "$_log"; then
+          break
+        fi
+        if grep -q "Qt Critical" "$_log"; then
+          log "Moonlight reported an error; back to Kodi in ${MOONLIGHT_ERROR_GRACE:-10} s"
+          sleep "${MOONLIGHT_ERROR_GRACE:-10}"
+          kill "$_pid" 2>/dev/null
+          break
+        fi
+        sleep 1
+      done
+      wait "$_pid"
+      _rc=$?
+      sleep 1
+      kill "$_tail" 2>/dev/null
+      return "$_rc"
       ;;
   esac
-  log "Moonlight exited with $?; starting Kodi again"
 )
 
 # Kodi's binary, not Debian's /usr/bin/kodi wrapper: the wrapper restarts
@@ -194,6 +219,7 @@ while :; do
     if [ -n "${MOONLIGHT_HOST:-}" ] && { [ "$_mode" = stream ] || [ "$_mode" = pair ]; }; then
       set +e
       run_moonlight "$_mode"
+      log "Moonlight exited with $?; starting Kodi again"
       set -e
       continue
     fi

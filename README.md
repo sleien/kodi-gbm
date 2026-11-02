@@ -130,11 +130,24 @@ Debian's Qt 5, whose EGLFS platform draws straight to KMS. Debian's Qt 6 has
 no EGLFS plugin, and Moonlight's x86 releases expect a desktop. Kodi and
 Moonlight take turns on the display in the same container:
 
-1. `script.homelab.games` writes `stream` or `pair` to
-   `~/.kodi/temp/kodi-gbm-launch` and quits Kodi (exit 0).
+1. `script.homelab.games` wakes the PC and waits, with a cancellable
+   progress dialog in Kodi, until Sunshine answers on port 47989. It sends a
+   wake again every 30 s, and gives up after 5 minutes. Then it writes
+   `stream` or `pair` to `~/.kodi/temp/kodi-gbm-launch` and quits Kodi
+   (exit 0).
 2. The entrypoint sees the note and runs `moonlight stream <host> <app>` or
    `moonlight pair <host> --pin <random PIN>`. The PIN is logged and shown.
 3. When Moonlight ends, the entrypoint starts Kodi again.
+
+**Moonlight's error dialogs take no gamepad input without a desktop.** Its
+gamepad navigation only polls while its window has focus, which it does not
+get under EGLFS. In the stream itself the controllers work through SDL. So
+until the video stream has started, a `Qt Critical` line (`Failed to connect
+to ...`) makes the entrypoint end Moonlight after `MOONLIGHT_ERROR_GRACE`
+seconds (10), and Kodi comes back.
+
+`kodi-peripheral-joystick` is installed, so game controllers drive Kodi's
+menus as well.
 
 | Variable | |
 |---|---|
