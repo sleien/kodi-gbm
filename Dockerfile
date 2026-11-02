@@ -68,6 +68,7 @@ RUN apt-get update \
 # - service.homelab.setup: installs the add-ons KODI_ADDONS names.
 # - script.homelab.cec: TV power over CEC for JSON-RPC callers.
 # - script.homelab.games: hands the screen to Moonlight (entrypoint.sh).
+# - service.homelab.musicupmix: upmixes stereo for music only.
 ADD --checksum=sha256:7409807249c9cc43c6b3b0df3fb9baa380bc62afcc8ad464444a95261a437ba6 \
     https://kodi.jellyfin.org/repository.jellyfin.kodi.zip /tmp/repository.jellyfin.kodi.zip
 ADD --checksum=sha256:fbe7c2be795fdd08a94ad772efa6b9ee58e2f0692a002eecb595c0c423d52eb0 \
@@ -77,7 +78,7 @@ RUN python3 -m zipfile -e /tmp/repository.jellyfin.kodi.zip /usr/share/kodi/addo
  && python3 -m zipfile -e /tmp/repository.siku2.zip /usr/share/kodi/addons/ \
  && rm /tmp/repository.jellyfin.kodi.zip /tmp/repository.siku2.zip \
  && chmod -R a+rX /usr/share/kodi/addons \
- && sed -i 's|^</addons>$|  <addon optional="true">repository.jellyfin.kodi</addon>\n  <addon optional="true">repository.siku2</addon>\n  <addon optional="true">service.homelab.setup</addon>\n  <addon optional="true">script.homelab.cec</addon>\n  <addon optional="true">script.homelab.games</addon>\n</addons>|' \
+ && sed -i 's|^</addons>$|  <addon optional="true">repository.jellyfin.kodi</addon>\n  <addon optional="true">repository.siku2</addon>\n  <addon optional="true">service.homelab.setup</addon>\n  <addon optional="true">script.homelab.cec</addon>\n  <addon optional="true">script.homelab.games</addon>\n  <addon optional="true">service.homelab.musicupmix</addon>\n</addons>|' \
       /usr/share/kodi/system/addon-manifest.xml \
  && grep -q 'service.homelab.setup' /usr/share/kodi/system/addon-manifest.xml
 

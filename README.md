@@ -45,7 +45,7 @@ The kernel's text console is fine; Kodi takes the display over from it.
 
 ## Built-in add-ons
 
-Five add-ons are built into Kodi's system directory and listed in its
+Six add-ons are built into Kodi's system directory and listed in its
 manifest. That is what makes Kodi enable them on a fresh profile; add-ons
 that appear any other way start disabled.
 
@@ -53,8 +53,9 @@ that appear any other way start disabled.
 |---|---|
 | `repository.jellyfin.kodi` | Jellyfin's own repository, where Jellyfin for Kodi and JellyCon live. Neither is in a Kodi repository. The zip is pinned by checksum. |
 | `repository.siku2` | SponsorBlock's author's repository: SponsorBlock (`script.service.sponsorblock`), which skips sponsor segments in YouTube videos, is in no Kodi repository either. The zip is pinned by checksum. |
-| `service.homelab.setup` | On every start, installs each add-on named in `KODI_ADDONS` (space-separated IDs) that is missing. It goes through Kodi's own installer, which resolves dependencies, by answering the "Install?" dialog with Yes. It retries after a repository refresh, and shows a notification for what it could not install. |
+| `service.homelab.setup` | On every start, installs each add-on named in `KODI_ADDONS` (space-separated IDs) that is missing, and scans the music sources from `KODI_SOURCES` into the library while it holds no songs. It goes through Kodi's own installer, which resolves dependencies, by answering the "Install?" dialog with Yes. It retries after a repository refresh, and shows a notification for what it could not install. |
 | `script.homelab.games` | Game streaming: wakes the gaming PC (`MOONLIGHT_WAKE_URL`), leaves a launch note and quits Kodi; the entrypoint runs Moonlight, then Kodi again. `RunScript(script.homelab.games)` streams, with `pair` it pairs with Sunshine once. |
+| `service.homelab.musicupmix` | With `KODI_MUSIC_UPMIX=1`, switches Kodi's stereo upmix on while music plays and off for video. With 5.1 channels and AC3 transcoding set (`audiooutput.channels=8`, `audiooutput.ac3transcode=true`), music reaches an HDMI ARC soundbar as Dolby Digital 5.1, while films keep their own mix. |
 | `script.homelab.cec` | TV power over CEC for callers that only have JSON-RPC: `Addons.ExecuteAddon` with `addonid` `script.homelab.cec` and `params` `["on"]`, `["standby"]` or `["toggle"]`. |
 
 For example, `KODI_ADDONS="plugin.video.youtube plugin.video.jellyfin"`.

@@ -31,7 +31,7 @@ run 'grep -q "<addon optional=\"true\">peripheral.joystick</addon>" /usr/share/k
   || fail "peripheral.joystick is not enabled by the manifest"
 ok "peripheral.joystick"
 
-for a in repository.jellyfin.kodi repository.siku2 service.homelab.setup script.homelab.cec script.homelab.games; do
+for a in repository.jellyfin.kodi repository.siku2 service.homelab.setup script.homelab.cec script.homelab.games service.homelab.musicupmix; do
   run "test -f /usr/share/kodi/addons/$a/addon.xml && grep -q '<addon optional=\"true\">$a</addon>' /usr/share/kodi/system/addon-manifest.xml" \
     || fail "$a is not built in and listed in the manifest"
 done

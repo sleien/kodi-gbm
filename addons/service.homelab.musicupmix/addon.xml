@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="service.homelab.musicupmix" name="Upmix for music" version="1.0.0" provider-name="sleien">
+  <requires>
+    <import addon="xbmc.python" version="3.0.1"/>
+  </requires>
+  <extension point="xbmc.service" library="service.py" start="login"/>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en_GB">Upmixes stereo for music only</summary>
+    <description lang="en_GB">With KODI_MUSIC_UPMIX=1, switches Kodi's stereo upmix on while music plays and off for video, so music fills a 5.1 setup (as Dolby Digital over HDMI ARC, with AC3 transcoding on) while films keep their own mix.</description>
+    <platform>all</platform>
+    <license>MIT</license>
+  </extension>
+</addon>

@@ -29,6 +29,13 @@ if not monitor.waitForAbort(10):
                  xbmc.LOGWARNING)
         xbmc.executebuiltin("Notification(TV setup,Not installed: %s,15000)"
                             % ", ".join(failed))
+    try:
+        scanned = homelab_setup.scan_music_if_empty(xbmc, os.environ)
+        if scanned:
+            xbmc.log("homelab setup: music library empty, scanning %s" % " ".join(scanned),
+                     xbmc.LOGINFO)
+    except Exception as e:
+        xbmc.log("homelab setup: music scan failed: %s" % e, xbmc.LOGWARNING)
     installed = [a for a in before if a not in failed]
     restart_for = homelab_setup.needs_restart(installed, os.environ)
     if restart_for and not monitor.abortRequested():

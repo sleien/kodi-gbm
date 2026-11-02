@@ -200,5 +200,39 @@ class KickTests(unittest.TestCase):
         self.assertEqual(kodi.modesets, [])
 
 
+class FakeLibraryKodi:
+    def __init__(self, songs):
+        self.songs = songs
+        self.scanned = []
+
+    def executeJSONRPC(self, request):
+        import json
+        req = json.loads(request)
+        if req["method"] == "AudioLibrary.GetSongs":
+            return json.dumps({"id": 1, "result": {"limits": {"start": 0, "end": 0, "total": self.songs}, "songs": []}})
+        if req["method"] == "AudioLibrary.Scan":
+            self.scanned.append(req["params"]["directory"])
+            return json.dumps({"id": 1, "result": "OK"})
+        raise AssertionError(req["method"])
+
+
+class MusicScanTests(unittest.TestCase):
+    ENV = {"KODI_SOURCES": "music:Music:/music/ video:Films:/films/"}
+
+    def test_scans_music_sources_when_the_library_is_empty(self):
+        kodi = FakeLibraryKodi(0)
+        self.assertEqual(homelab_setup.scan_music_if_empty(kodi, self.ENV), ["/music/"])
+        self.assertEqual(kodi.scanned, ["/music/"])
+
+    def test_leaves_a_library_that_has_songs(self):
+        kodi = FakeLibraryKodi(5080)
+        self.assertEqual(homelab_setup.scan_music_if_empty(kodi, self.ENV), [])
+        self.assertEqual(kodi.scanned, [])
+
+    def test_nothing_without_music_sources(self):
+        kodi = FakeLibraryKodi(0)
+        self.assertEqual(homelab_setup.scan_music_if_empty(kodi, {}), [])
+
+
 if __name__ == "__main__":
     unittest.main()

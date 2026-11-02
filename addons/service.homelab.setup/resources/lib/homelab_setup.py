@@ -11,6 +11,9 @@ a race with the skin's own start-up scripts. Skins are chosen by KODI_SETTINGS
 instead, which the entrypoint writes before Kodi starts; when something just
 installed is named there, Kodi is restarted so it takes effect.
 
+A music library that holds no songs is scanned from the music sources in
+KODI_SOURCES (scan_music_if_empty).
+
 With KODI_DISPLAY_KICK set to a screen mode, the display mode is set twice
 right after start, through that mode and back (kick_display); see there.
 
@@ -119,3 +122,31 @@ def rpc(xbmc, method, params):
     if "error" in response:
         raise RuntimeError("%s: %s" % (method, response["error"]))
     return response["result"]
+
+
+def music_paths(environ):
+    """The music sources' paths in KODI_SOURCES (type:name:path entries)."""
+    paths = []
+    for item in environ.get("KODI_SOURCES", "").split():
+        parts = item.split(":", 2)
+        if len(parts) == 3 and parts[0] == "music" and parts[2]:
+            paths.append(parts[2])
+    return paths
+
+
+def scan_music_if_empty(xbmc, environ):
+    """Scan the music sources into the library while it holds no songs.
+
+    A source added through Kodi's dialog is scanned right away; one written
+    into sources.xml (KODI_SOURCES) is not, and "update library on startup"
+    only updates what the library already knows. Returns the paths scanned.
+    """
+    paths = music_paths(environ)
+    if not paths:
+        return []
+    songs = rpc(xbmc, "AudioLibrary.GetSongs", {"limits": {"start": 0, "end": 1}})
+    if songs.get("limits", {}).get("total", 0) > 0:
+        return []
+    for path in paths:
+        rpc(xbmc, "AudioLibrary.Scan", {"directory": path, "showdialogs": False})
+    return paths
