@@ -5,6 +5,28 @@
 # Kodi comes from Debian's own package, so it is the version Debian ships for
 # trixie (21.2) with Debian's security fixes. The image is pinned by digest
 # where it is used; Renovate proposes the base image's digest bumps here.
+
+# Moonlight, the game streaming client, built from its release tarball. Debian
+# does not package it, and its x86 Linux releases (AppImage, Flatpak, Snap)
+# expect a desktop. Built against Debian's Qt 5, whose EGLFS platform draws
+# straight to KMS like Kodi does; Debian's Qt 6 ships no EGLFS plugin.
+FROM debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad AS moonlight
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates g++ make pkg-config \
+      qtbase5-dev qtdeclarative5-dev qtquickcontrols2-5-dev qt5-qmake libqt5svg5-dev \
+      libssl-dev libsdl2-dev libsdl2-ttf-dev libopus-dev \
+      libavcodec-dev libavutil-dev libswscale-dev libva-dev libdrm-dev \
+ && rm -rf /var/lib/apt/lists/*
+ADD --checksum=sha256:217afac54e4f8734f3d97b32cb8c8b46b677e87f25b77c945343dd06f359e189 \
+    https://github.com/moonlight-stream/moonlight-qt/releases/download/v6.2.0/MoonlightSrc-6.2.0.tar.gz /tmp/moonlight.tar.gz
+RUN mkdir /src && tar -xzf /tmp/moonlight.tar.gz -C /src \
+ && cd /src \
+ && /usr/lib/qt5/bin/qmake moonlight-qt.pro PREFIX=/usr \
+ && make -j"$(nproc)" release \
+ && make install INSTALL_ROOT=/out \
+ && test -x /out/usr/bin/moonlight
+
 FROM debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
 
 # kodi-inputstream-adaptive: DASH playback, which the YouTube add-on needs.
@@ -25,6 +47,11 @@ RUN apt-get update \
       cec-utils \
       libjs-jquery \
       libjs-iscroll \
+      libqt5gui5t64 libqt5qml5 libqt5quick5 libqt5quickcontrols2-5 \
+      libqt5network5t64 libqt5svg5 qml-module-qtquick2 \
+      qml-module-qtquick-controls2 qml-module-qtquick-layouts \
+      qml-module-qtquick-window2 qml-module-qtquick-templates2 \
+      libsdl2-2.0-0 libsdl2-ttf-2.0-0 libopus0 libva-drm2 \
       ca-certificates \
       tini \
  && rm -rf /var/lib/apt/lists/*
@@ -38,6 +65,7 @@ RUN apt-get update \
 #   no Kodi repository either. Pinned by checksum.
 # - service.homelab.setup: installs the add-ons KODI_ADDONS names.
 # - script.homelab.cec: TV power over CEC for JSON-RPC callers.
+# - script.homelab.games: hands the screen to Moonlight (entrypoint.sh).
 ADD --checksum=sha256:7409807249c9cc43c6b3b0df3fb9baa380bc62afcc8ad464444a95261a437ba6 \
     https://kodi.jellyfin.org/repository.jellyfin.kodi.zip /tmp/repository.jellyfin.kodi.zip
 ADD --checksum=sha256:fbe7c2be795fdd08a94ad772efa6b9ee58e2f0692a002eecb595c0c423d52eb0 \
@@ -47,7 +75,7 @@ RUN python3 -m zipfile -e /tmp/repository.jellyfin.kodi.zip /usr/share/kodi/addo
  && python3 -m zipfile -e /tmp/repository.siku2.zip /usr/share/kodi/addons/ \
  && rm /tmp/repository.jellyfin.kodi.zip /tmp/repository.siku2.zip \
  && chmod -R a+rX /usr/share/kodi/addons \
- && sed -i 's|^</addons>$|  <addon optional="true">repository.jellyfin.kodi</addon>\n  <addon optional="true">repository.siku2</addon>\n  <addon optional="true">service.homelab.setup</addon>\n  <addon optional="true">script.homelab.cec</addon>\n</addons>|' \
+ && sed -i 's|^</addons>$|  <addon optional="true">repository.jellyfin.kodi</addon>\n  <addon optional="true">repository.siku2</addon>\n  <addon optional="true">service.homelab.setup</addon>\n  <addon optional="true">script.homelab.cec</addon>\n  <addon optional="true">script.homelab.games</addon>\n</addons>|' \
       /usr/share/kodi/system/addon-manifest.xml \
  && grep -q 'service.homelab.setup' /usr/share/kodi/system/addon-manifest.xml
 
@@ -59,6 +87,7 @@ RUN groupadd --gid 1000 kodi \
  && useradd --uid 1000 --gid 1000 --create-home --home-dir /home/kodi kodi \
  && chmod 0755 /home/kodi
 
+COPY --from=moonlight /out/usr/ /usr/
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY lib/apply_settings.py lib/add_sources.py /usr/local/lib/kodi-gbm/
 

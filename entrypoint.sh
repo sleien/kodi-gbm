@@ -13,6 +13,8 @@
 #                                       guisettings.xml on every start
 #   KODI_SOURCES                        type:name:path entries added to
 #                                       sources.xml if their path is missing
+#   MOONLIGHT_HOST, MOONLIGHT_APP, MOONLIGHT_OPTIONS, MOONLIGHT_AUDIO_DEVICE,
+#   MOONLIGHT_DRM_DEVICE                game streaming (script.homelab.games)
 #   KODI_SEED_ONLY=1                    seed, then exit instead of starting Kodi
 set -eu
 
@@ -122,6 +124,43 @@ if [ "${KODI_SEED_ONLY:-0}" = 1 ]; then
   exit 0
 fi
 
+# --- Moonlight ----------------------------------------------------------------
+# script.homelab.games leaves "stream" or "pair" in this file and quits Kodi;
+# Moonlight then gets the display, and Kodi comes back after it.
+LAUNCH_NOTE=$KODI_HOME/temp/kodi-gbm-launch
+MOONLIGHT_BIN=${MOONLIGHT_BIN:-/usr/bin/moonlight}
+
+run_moonlight() (
+  # A subshell: Moonlight's environment must not leak into Kodi's next start.
+  _card=${MOONLIGHT_DRM_DEVICE:-}
+  if [ -z "$_card" ]; then
+    for _c in /dev/dri/card*; do _card=$_c; break; done
+  fi
+  printf '{ "device": "%s" }\n' "$_card" >/tmp/eglfs-kms.json
+  export QT_QPA_PLATFORM=eglfs QT_QPA_EGLFS_INTEGRATION=eglfs_kms \
+         QT_QPA_EGLFS_KMS_CONFIG=/tmp/eglfs-kms.json SDL_AUDIODRIVER=alsa
+  if [ -n "${MOONLIGHT_AUDIO_DEVICE:-}" ]; then
+    export AUDIODEV="$MOONLIGHT_AUDIO_DEVICE"
+  fi
+  # Pairing and settings live in Kodi's data directory, which is kept.
+  export XDG_CONFIG_HOME="$KODI_HOME/moonlight" XDG_CACHE_HOME=/tmp/moonlight-cache
+  mkdir -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
+  case "$1" in
+    pair)
+      _pin=$(od -An -N2 -tu2 /dev/urandom | awk '{ printf "%04d", $1 % 10000 }')
+      log "Moonlight pairing: enter PIN $_pin in Sunshine's web UI on $MOONLIGHT_HOST"
+      "$MOONLIGHT_BIN" pair "$MOONLIGHT_HOST" --pin "$_pin"
+      ;;
+    stream)
+      # MOONLIGHT_OPTIONS is split into words on purpose: it holds flags.
+      # shellcheck disable=SC2086
+      "$MOONLIGHT_BIN" stream "$MOONLIGHT_HOST" "${MOONLIGHT_APP:-Steam Big Picture}" \
+        ${MOONLIGHT_OPTIONS:-}
+      ;;
+  esac
+  log "Moonlight exited with $?; starting Kodi again"
+)
+
 # Kodi's binary, not Debian's /usr/bin/kodi wrapper: the wrapper restarts
 # Kodi itself on exit code 65 (RestartApp), and KODI_SETTINGS has to be
 # written before each start. The wrapper's one relevant setting is the malloc
@@ -130,6 +169,7 @@ KODI_BIN=${KODI_BIN:-/usr/lib/x86_64-linux-gnu/kodi/kodi.bin}
 export MALLOC_MMAP_THRESHOLD_=131072
 
 # Exit codes:
+#  0 with a launch note from script.homelab.games: Moonlight, then Kodi again.
 #  65 (RestartApp, used by the setup service after installing a skin):
 #     start again here, with KODI_SETTINGS written first.
 #  0  (Kodi's own Exit) is the way to the host's console: the container stays
@@ -144,8 +184,22 @@ while :; do
   "$KODI_BIN" --standalone --windowing=gbm --audio-backend=alsa
   code=$?
   set -e
-  [ "$code" -eq 65 ] || break
-  log "Kodi asked to restart; starting it again"
+  if [ "$code" -eq 65 ]; then
+    log "Kodi asked to restart; starting it again"
+    continue
+  fi
+  if [ "$code" -eq 0 ] && [ -f "$LAUNCH_NOTE" ]; then
+    _mode=$(cat "$LAUNCH_NOTE")
+    rm -f "$LAUNCH_NOTE"
+    if [ -n "${MOONLIGHT_HOST:-}" ] && { [ "$_mode" = stream ] || [ "$_mode" = pair ]; }; then
+      set +e
+      run_moonlight "$_mode"
+      set -e
+      continue
+    fi
+    log "ignoring launch note \"$_mode\" (MOONLIGHT_HOST: ${MOONLIGHT_HOST:-unset})"
+  fi
+  break
 done
 if [ "$code" -ne 0 ]; then
   exit "$code"

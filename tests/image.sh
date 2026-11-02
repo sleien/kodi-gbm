@@ -25,7 +25,7 @@ run 'ls /usr/lib/x86_64-linux-gnu/kodi/addons/inputstream.adaptive/' \
   || fail "inputstream.adaptive not installed"
 ok "inputstream.adaptive"
 
-for a in repository.jellyfin.kodi repository.siku2 service.homelab.setup script.homelab.cec; do
+for a in repository.jellyfin.kodi repository.siku2 service.homelab.setup script.homelab.cec script.homelab.games; do
   run "test -f /usr/share/kodi/addons/$a/addon.xml && grep -q '<addon optional=\"true\">$a</addon>' /usr/share/kodi/system/addon-manifest.xml" \
     || fail "$a is not built in and listed in the manifest"
 done
@@ -34,6 +34,13 @@ ok "built-in add-ons enabled by the manifest"
 run 'cd /usr/share/kodi/addons/webinterface.default/js && test -s jquery-1.8.2.min.js && test -s iscroll-min.js' \
   || fail "the built-in web interface's script links dangle"
 ok "built-in web interface complete"
+
+# Moonlight's binary finds all its libraries and Qt's EGLFS KMS plugin.
+run 'ldd /usr/bin/moonlight | grep -c "not found"' | grep -qx 0 \
+  || fail "moonlight is missing libraries: $(run 'ldd /usr/bin/moonlight | grep "not found"')"
+run 'test -f /usr/lib/x86_64-linux-gnu/qt5/plugins/platforms/libqeglfs.so && test -f /usr/lib/x86_64-linux-gnu/qt5/plugins/egldeviceintegrations/libqeglfs-kms-integration.so' \
+  || fail "Qt 5 EGLFS KMS plugins missing"
+ok "Moonlight complete, with EGLFS KMS"
 
 # Single quotes on purpose: the expansion happens inside the container.
 # shellcheck disable=SC2016
@@ -121,6 +128,25 @@ set -e
 [ "$restarted" = 3 ] || fail "after RestartApp the second run should end the container with 3, got $restarted"
 [ "$(wc -l <"$tmp/runs")" -eq 2 ] || fail "Kodi was not started again after RestartApp"
 ok "RestartApp starts Kodi again with KODI_SETTINGS"
+
+# A launch note hands the display to Moonlight, then Kodi starts again: a stub
+# Kodi leaves "stream" and quits (0), then crashes (3) on its second run; a
+# stub Moonlight records its arguments.
+set +e
+docker run --rm --user "$as_me" -e KODI_WEB_PASSWORD=x -e KODI_BIN=/tmp/kodi \
+  -e MOONLIGHT_BIN=/tmp/moonlight -e MOONLIGHT_HOST=192.0.2.5 -e 'MOONLIGHT_OPTIONS=--4K --fps 60' \
+  -v "$tmp:/home/kodi/.kodi" --entrypoint /bin/sh "$IMAGE" \
+  -c "mkdir -p /home/kodi/.kodi/temp; rm -f /home/kodi/.kodi/kruns; printf '#!/bin/sh\necho run >>/home/kodi/.kodi/kruns\n[ \$(wc -l </home/kodi/.kodi/kruns) -ge 2 ] && exit 3\necho stream >/home/kodi/.kodi/temp/kodi-gbm-launch\nexit 0\n' >/tmp/kodi; printf '#!/bin/sh\necho \"\$@\" >/home/kodi/.kodi/moonlight-args\nenv | grep -E \"^(QT_QPA_PLATFORM|XDG_CONFIG_HOME)=\" | sort >>/home/kodi/.kodi/moonlight-args\n' >/tmp/moonlight; chmod +x /tmp/kodi /tmp/moonlight; timeout 10 /usr/local/bin/entrypoint.sh" >/dev/null 2>&1
+handed=$?
+set -e
+[ "$handed" = 3 ] || fail "after Moonlight, Kodi should run again and end with 3, got $handed"
+grep -qx 'stream 192.0.2.5 Steam Big Picture --4K --fps 60' "$tmp/moonlight-args" \
+  || fail "Moonlight not run as expected: $(cat "$tmp/moonlight-args" 2>/dev/null)"
+grep -qx 'QT_QPA_PLATFORM=eglfs' "$tmp/moonlight-args" || fail "Moonlight not on EGLFS"
+grep -qx 'XDG_CONFIG_HOME=/home/kodi/.kodi/moonlight' "$tmp/moonlight-args" \
+  || fail "Moonlight's pairing would not persist"
+[ ! -f "$tmp/temp/kodi-gbm-launch" ] || fail "launch note left behind"
+ok "a launch note hands the display to Moonlight, then Kodi returns"
 
 # KODI_SETTINGS is written into guisettings.xml before Kodi starts, each start.
 rm -f "$u/guisettings.xml"

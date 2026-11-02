@@ -45,7 +45,7 @@ The kernel's text console is fine; Kodi takes the display over from it.
 
 ## Built-in add-ons
 
-Four add-ons are built into Kodi's system directory and listed in its
+Five add-ons are built into Kodi's system directory and listed in its
 manifest. That is what makes Kodi enable them on a fresh profile; add-ons
 that appear any other way start disabled.
 
@@ -54,6 +54,7 @@ that appear any other way start disabled.
 | `repository.jellyfin.kodi` | Jellyfin's own repository, where Jellyfin for Kodi and JellyCon live. Neither is in a Kodi repository. The zip is pinned by checksum. |
 | `repository.siku2` | SponsorBlock's author's repository: SponsorBlock (`script.service.sponsorblock`), which skips sponsor segments in YouTube videos, is in no Kodi repository either. The zip is pinned by checksum. |
 | `service.homelab.setup` | On every start, installs each add-on named in `KODI_ADDONS` (space-separated IDs) that is missing. It goes through Kodi's own installer, which resolves dependencies, by answering the "Install?" dialog with Yes. It retries after a repository refresh, and shows a notification for what it could not install. |
+| `script.homelab.games` | Game streaming: wakes the gaming PC (`MOONLIGHT_WAKE_URL`), leaves a launch note and quits Kodi; the entrypoint runs Moonlight, then Kodi again. `RunScript(script.homelab.games)` streams, with `pair` it pairs with Sunshine once. |
 | `script.homelab.cec` | TV power over CEC for callers that only have JSON-RPC: `Addons.ExecuteAddon` with `addonid` `script.homelab.cec` and `params` `["on"]`, `["standby"]` or `["toggle"]`. |
 
 For example, `KODI_ADDONS="plugin.video.youtube plugin.video.jellyfin"`.
@@ -121,6 +122,32 @@ entrypoint seeing it.
 **A crash exits the container** with Kodi's code. The restart policy brings it
 back, and the crash shows in `docker ps` and in the logs. There is no restart
 loop inside the container.
+
+## Games (Moonlight)
+
+Moonlight 6.2.0 is built into the image from its release tarball, against
+Debian's Qt 5, whose EGLFS platform draws straight to KMS. Debian's Qt 6 has
+no EGLFS plugin, and Moonlight's x86 releases expect a desktop. Kodi and
+Moonlight take turns on the display in the same container:
+
+1. `script.homelab.games` writes `stream` or `pair` to
+   `~/.kodi/temp/kodi-gbm-launch` and quits Kodi (exit 0).
+2. The entrypoint sees the note and runs `moonlight stream <host> <app>` or
+   `moonlight pair <host> --pin <random PIN>`. The PIN is logged and shown.
+3. When Moonlight ends, the entrypoint starts Kodi again.
+
+| Variable | |
+|---|---|
+| `MOONLIGHT_HOST` | the Sunshine host; without it the add-on does nothing |
+| `MOONLIGHT_APP` | default `Steam Big Picture` |
+| `MOONLIGHT_OPTIONS` | Moonlight's stream flags, e.g. `--4K --fps 60` |
+| `MOONLIGHT_WAKE_URL` | POSTed to before streaming, e.g. an ai-waker admin `/wake` |
+| `MOONLIGHT_DRM_DEVICE` | the DRM card for EGLFS; default the first `/dev/dri/card*` |
+| `MOONLIGHT_AUDIO_DEVICE` | the ALSA device for SDL, e.g. `hdmi:CARD=Generic,DEV=1` |
+
+Pairing and settings are kept in `~/.kodi/moonlight` (`XDG_CONFIG_HOME`).
+Pass `/dev/input` as a bind mount with a `c 13:* rmw` cgroup rule, rather
+than as devices, so controllers plugged in later are seen.
 
 ## Releasing
 
